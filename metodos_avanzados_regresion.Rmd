@@ -1,0 +1,68 @@
+---
+title: "Métodos avanzados de regresión (Shrinkage Methods)"
+author: "Ángel Escalante"
+date: "2/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introducción
+
+(Antes de empezar a leer, doy por hecho que ya están muy truchas con regresiones lineales múltiples, ajustar parámetros en $\texttt{R}$, interpretar parámetros y leves conocimientos de validación cruzada.)
+
+Los algoritmos de regresión lineal (últimos cuadrados o gradiente de descenso), pueden resultar fuertemente inestables o directamente inaplicables cuando el número de variables $p$ es similar o incluso superior al número de observaciones $n$. Una alternativa son los métodos de regresión penalizada. La idea clave es la penalización, se evita el sobreajuste debido al gran número de variables predictoras imponiendo una penalización o término de penalización, que obligará a que alguna
+componente del vector de parámetros $\beta = (\beta_{1},..,\beta_{p})'$ sea cero.
+
+## Regresion Rígida (Ridge Regression)
+
+En la regresión lineal tradicional, el método de mínimos cuadrados ordinarios estima $\beta_{1},..,\beta_{p}$ con los valores que minimizan
+
+$$RSS = \sum_{i=1}^{n} (y_{i} - \beta_{0} - \sum_{j=1}^{p}\beta_{j}x_{ij})^{2}$$
+
+La regresión rígida actúa de forma similar, a diferencia de que los parámetros beta son estimados minimizando una cantidad diferente:
+
+$$\sum_{i=1}^{n} (y_{i} - \beta_{0} - \sum_{j=1}^{p}\beta_{j}x_{ij})^{2}+\lambda\sum_{j=1}^{p}\beta_{j}^{2}=RSS+\lambda\sum_{j=1}^{p}\beta_{j}^{2}$$
+
+Denotamos estos parámetros como $\beta^{R}$, el parámetro $\lambda \ge 0$ es un parámetro de $\textit{arbitrareo}$ que buscamos tunear, comúnmente con técnicas de validación cruzada. El segundo término $\lambda\sum_{j}\beta_{j}^{2}$ es llamado $\textit{término de penalización}$. Cuando $\lambda = 0$ estamos ajustando básicamente una regresión lineal múltiple. Bajo este enfoque, estimamos un vector de parámetros $\hat{\beta_{\lambda}^{R}}$ para cada posible elección de $\lambda$.
+
+Recapitulando (¡demuéstralo si puedes, perro!):
+
+* Si $\lambda \to 0$ entonces $\hat{\beta}^{R}_{\lambda} \to \hat{\beta}^{OLS}$
+* Si $\lambda \to \infty$ entonces $\hat{\beta}^{R}_{\lambda} \to 0$
+
+### Especificación del modelo
+
+La función de pérdida para la regresión rígida se define como
+
+$$ L_{R}(\hat{\beta}) = \sum_{i=1}^{n} (y_{i} - \hat{\beta}_{0} - \sum_{j=1}^{p}\hat{\beta}_{j}x_{ij})^{2}+\lambda\sum_{j=1}^{p}\hat{\beta}_{j}^{2} = ||y-X\hat{\beta}||^{2} + \lambda||\hat{\beta}||^{2}$$
+
+Resolviendo para $\hat{\beta}$ lleva a el estimado $\hat{\beta}^{R}_{\lambda} = (X'X+\lambda I)^{-1}(X'Y)$ (usando notación matricial).
+
+```{r cars, message=FALSE, warning=FALSE}
+# Cargando paquetes, lectura de datos y sembrando semilla aleatoria para reproducción
+set.seed(69)    # sembrar semillas con número mágico para reproducción
+library(glmnet)  # para regresión rígida
+library(dplyr)   # para limpiar datos
+library(psych)   # for function tr() to compute trace of a matrix
+
+data("mtcars")
+# Center y, X will be standardized in the modelling function
+y <- mtcars %>% select(mpg) %>% scale(center = TRUE, scale = FALSE) %>% as.matrix()
+X <- mtcars %>% select(-mpg) %>% as.matrix()
+```
+
+Ejecutar la validación cruzada y generar gráfica de resultados:
+
+```{r plot1, message=FALSE}
+# Ejecutar validación cruzada 10-fold para seleccionar lambda
+lambdas_to_try <- 10 ^ seq(-3, 5, length.out = 100)
+# alpha = 0 implementar regresión rígida
+ridge_cv <- cv.glmnet(X, y, alpha = 0, lambda = lambdas_to_try,
+                      standardize = TRUE, nfolds = 10)
+# Graficar resultados de 
+plot(ridge_cv)
+```
+
