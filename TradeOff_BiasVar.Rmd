@@ -1,0 +1,130 @@
+---
+title: "Statistical Learning - Semana 1"
+author: "Ángel Escalante"
+date: "3/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Semana 1
+
+### Selección de modelo y trade-off de varianza y sesgo
+
+Para visualizar uno de los temas platicados en los videos de la primera clase, usaré un ejemplo básico con datos simulados de una función de costo $y=500+0.4(q-10)^{3}$, donde $q$ es la cantidad de producto producido y $y$ es el costo asociado a la producción. Esto nos creará una línea perfecta como se aprecia abajo:
+
+```{r primer, warning = FALSE}
+# Cargando paquetes del tidyverse
+suppressPackageStartupMessages(library(tidyverse))
+
+# Datos para gráfica
+q <- seq(0, 20, 0.1)
+fun_y <- 500 + 0.4 * (q - 10) ^ 3
+
+# Gráfica
+plot(q, fun_y, type = 'l', col = 'red', main = 'Función de costo')
+
+```
+
+Sin embargo, sabemos que las observaciones de fenómenos aleatorios siempre tienen un error asociado, y lo que me interesa es simular datos que puedan provenir de esas observaciones. Por tanto, añadiré un término de error $$\epsilon \sim N(\mu = 10, \sigma = 80)$$ 
+Así, simulariamos valores de la siguiente variable $Y=500+0.4(q-10)^{3} + \epsilon$
+
+```{r segundo, warning = FALSE}
+# Creando término de error proveniente de una normal
+set.seed(69) # Semilla con número mágico
+error <- rnorm(length(q), mean = 10, sd = 80)
+fun_y_error <- fun_y + error
+
+# Gráfica de datos simulados
+plot(q, fun_y, col = 'red', type = 'l', main = 'Función de costo')
+points(q, fun_y_error)
+legend(0, 900,
+       legend = c('Relación subyacente', 'Datos simulados'),
+       col = c('red', 'black'),
+       lty = 1)
+
+
+```
+
+Ajustamos un modelo lineal simple y dos modelos polinómicos de grado $N=3$ y $N=26$, es decir,
+$$\hat{Y}=\hat{\beta}_{0}+\hat{\beta}_{1}q$$
+$$\hat{Y}=\hat{\beta}_{0}+\hat{\beta}_{1}q+\hat{\beta}_{2}q^{2}+\hat{\beta}_{3}q^{3}$$
+$$\hat{Y}=\hat{\beta}_{0}+\hat{\beta}_{1}q+\hat{\beta}_{2}q^{2}+...+\hat{\beta}_{26}q^{26}$$
+
+```{r tercer, warning = FALSE}
+# Creando un data.frame
+df <- data_frame(y = fun_y_error, q = q)
+
+mod1 <- lm(y ~ q, data = df)
+mod2 <- lm(y ~ poly(q, 3), data = df)
+mod3 <- lm(y ~ poly(q, 26), data = df)
+
+summary(mod1)
+summary(mod2)
+summary(mod3)
+
+plot(df$q, df$y, main = 'Ajustando distintos modelos a los datos')
+lines(q, predict(mod1, newdata = df), col = 'red')
+lines(q, predict(mod2, newdata = df), col = 'darkgreen')
+lines(q, predict(mod3, newdata = df), col = 'purple')
+
+legend(0, 1000,
+       legend = c('N = 1', 'N = 3', 'N = 26'),
+       col = c('red', 'darkgreen', 'purple'),
+       lty = 1)
+```
+
+Regresando al enfoque de Statistical Learning, una forma de medir la eficiencia de estos modelos para predecir nuevos datos, deberíamos dividir el conjunto de datos en dos, un conjunto de entrenamiento ($Tr =\{x_{i}, y_{i}\}_{i}^{N}$) y uno de prueba ($Te = \{x_{i}, y_{i}\}_{i}^{M}$) y definir una medida de error para el testing; el error cuadrático medio $MSE = Average_{i \in Te}$, esto es, el promedio del error entre la predicción y el valor real elevado al cuadrado.
+
+Definamos la función de MSE (Mean Square Error) en R!
+
+```{r mse, warning = FALSE}
+# Creando función de MSE
+mse <- function(x, y){
+  if(length(x) != length(y)) stop('¡Los vectores deben ser de la misma longitud!')
+  sum((x - y) ^ 2)/ length(x)
+}
+  
+```
+
+Ahora creamos los conjuntos de datos de train y testing:
+
+```{r split_dat, warning = FALSE}
+# Dividimos 80% de datos de entrenamiento y 20% de testing
+train_rows <- sample(1:nrow(df), round(0.8 * nrow(df), 0))
+train <- df[train_rows, ]
+test <- df[-train_rows, ]
+
+# Ajustamos al conjunto de datos de entrenamiento los 3 modelos
+mod_train1 <- lm(y ~ q, data = train)
+mod_train2 <- lm(y ~ poly(q, 3), data = train)
+mod_train3 <- lm(y ~ poly(q, 26), data = train)
+```
+
+Se ajusta el modelo de regresión a cada conjunto de datos y después se mide el Mean Squared Error:
+
+```{r graf_final, warning = FALSE}
+# Hacemos predicción sobre los datos de testing para los 3 modelos sobre los datos de entrenamiento
+t1 <- mse(train$y, predict(mod_train1, newdata = train))
+t2 <- mse(train$y, predict(mod_train2, newdata = train))
+t3 <- mse(train$y, predict(mod_train3, newdata = train))
+
+# Hacemos predicción sobre los datos de testing para los 3 modelos sobre los datos de entrenamiento
+te1 <- mse(test$y, predict(mod_train1, newdata = test))
+te2 <- mse(test$y, predict(mod_train2, newdata = test))
+te3 <- mse(test$y, predict(mod_train3, newdata = test))
+
+df_final <- data_frame(type = c(rep('Train', 3), rep('Test', 3)),
+                       modelo = rep(c('Modelo 1', 'Modelo 2', 'Modelo 3'), 2),
+                          n = rep(c(1, 3, 26), 2),
+                          mse = c(t1, t2, t3, te1, te2, te3))
+
+theme_set(theme_bw())
+ggplot(df_final, aes(x = n, y = mse, group = type)) +
+  geom_line(aes(linetype = type)) + geom_point(aes(color = modelo), size = 6) +
+  theme(legend.position = "top") + labs(title = 'Error cuadrático medio') + 
+  scale_color_manual(values = c('red', 'darkgreen', 'purple'))
+```
+
