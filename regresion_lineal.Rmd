@@ -1,0 +1,99 @@
+---
+title: "Lineal Regression - Semana 2"
+author: "angel"
+date: "3/14/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Semana 2
+
+### Multiple Lineal Regression
+
+El modelo lineal más simple se define como:
+
+$$Y = \beta_{0}+\beta_{1}X_{1}+\beta_{2}X_{2}+...+\beta_{n}X_{n}+\epsilon$$
+
+En este modelo $\beta_{j}$ se interpretan como el efecto promedio que tiene en $Y$ cuando $X_{j}$ aumenta en una unidad (cuando el resto de variables se encuentran fijas).
+
+Veamos un caso con un dataset de marketing. La base de datos $\texttt{Advertising}$ (la cual pueden encontrar en el repositorio en GitHub: https://github.com/AFEScalante/StatisticalLearning.Curso ). Demos un vistazo a los datos y después empecemos a conjeturar algunas hipótesis.
+
+```{r primer, warning = FALSE}
+# Cargando paquetes del tidyverse
+suppressPackageStartupMessages(library(tidyverse))
+library(corrplot)
+library(scatterplot3d)
+
+# Leemos los datos
+adv <- read_csv('./Advertising.csv')
+# Primer vistazo a los datos
+glimpse(adv)
+
+# Primer vistazo gráfico
+pairs(adv[, 2:ncol(adv)], main = 'Inversión en medios y ventas',
+      pch = 21, bg = c("darkgray"))
+
+```
+
+Pareciera que hay una relación entre la inversión en TV, Radio y las Ventas. Confirmemos esto con una matriz de correlación.
+
+```{r corr, warning = FALSE}
+# Matriz de correlación 
+cor_adv <- cor(adv[, -1])
+corrplot(cor_adv, type = 'upper')
+```
+
+Con esto, podemos plantear los siguientes modelos uno a uno de la siguiente manera:
+
+* $\texttt{sales} = \beta_{0}+\beta_{1}\texttt{TV}+\epsilon$
+* $\texttt{sales} = \beta_{0}+\beta_{1}\texttt{Radio}+\epsilon$
+* $\texttt{sales} = \beta_{0}+\beta_{1}\texttt{Newspaper}+\epsilon$
+
+```{r reg1, warning = FALSE}
+# Apilando los datos para mejor visualización
+adv_stacked <- adv %>% gather('Media', 'Value', 2:4)
+
+# Regresión uno a uno 
+ggplot(adv_stacked, aes(x = Value, y = Sales)) + geom_point(col = 'darkgray') + theme_bw() +
+  geom_smooth(method = "lm", se = TRUE, col = 'firebrick') + labs(x = 'Investment') +
+  facet_wrap(~Media, scales = 'free')
+
+# Ventas contra inversión en periódicos
+summary(lm(Sales ~ Newspaper, data = adv))
+# Ventas contra inversión en Radio
+summary(lm(Sales ~ Radio, data = adv))
+# Ventas contra inversión en TV
+summary(lm(Sales ~ TV, data = adv))
+```
+
+Por último, verémos la diferencia con el modelo completo, un modelo en el que sean consideradas todas la variables:
+
+$$\texttt{sales} = \beta_{0}+\beta_{1}\texttt{Newspaper}+\beta_{2}\texttt{Radio}+\beta_{3}\texttt{TV}+\epsilon$$
+
+```{r reg2, warning = FALSE}
+
+# Ventas contra inversiones
+summary(lm(Sales ~ .-X1, data = adv))
+```
+
+Quitemos la variable $\texttt{Newspaper}$, ya que en el modelo completo vemos que el p-valor indica que no es estadísticamente significativo, veamos el modelo con $\texttt{TV}$ y $\texttt{Radio}$ y su representación gráfica en $R^3$.
+
+```{r reg3, warning = FALSE}
+# Ventas contra TV y Radio
+mod <- lm(Sales ~ TV + Radio, data = adv)
+
+# Plano en R3
+plot3d <- scatterplot3d(adv$TV, adv$Radio, adv$Sales,
+                        color = "darkgray", pch = 16, box = FALSE, 
+                        main ="Plano de regresión",
+                        xlab = 'TV', ylab = 'Radio', zlab = 'Sales')
+plot3d$plane3d(mod, lty.box = "solid", col = "firebrick")
+```
+
+### Interacciones entre variables
+
+
+
