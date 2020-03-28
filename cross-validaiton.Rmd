@@ -1,0 +1,118 @@
+---
+title: "Statistical Learning - Semana 4"
+author: "Ángel Escalante"
+date: "3/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Cross-Validation
+
+En el curso se vieron dos métodos de validación de errores del modelo:
+
+* Leave-one-out
+* k-fold validation
+
+Usaré datos de ejemplo y programaré algunos métodos para lograr un mejor entendimiento de ambos
+métodos. ¡A darle que es mole de olla!
+
+Para esto, usaré los datos de del paquete $\texttt{ISLR}$ el cuál puedes obtener corriendo el comando en la consola de R: $\texttt{install.package("ISLR")}$. Los datos se llaman $\texttt{Auto}$, vamos a darles un vistazo:
+
+```{r primer, warning = FALSE}
+library(ISLR) # Cargando el paquete del curso que contiene los datos
+library(dplyr) # Paquete chingón para manipulación de datos
+
+
+glimpse(Auto)
+
+# Intentaremos explicar los mpg (Millas por galón) a través de horsepower (Caballos de fuerza)
+plot(Auto$horsepower, Auto$mpg)
+
+# Ajustaremos 3 modelos lineales con distinto grado de complejidad 
+mod1 <- lm(mpg ~ horsepower, data = Auto)
+mod2 <- lm(mpg ~ poly(horsepower, 2), data = Auto)
+mod3 <- lm(mpg ~ poly(horsepower, 20), data = Auto)
+
+# Gráfica del modelo lineal simple
+abline(mod1, col = "red", lwd = 2)
+
+# Curvas de modelos polinómicos
+lines(sort(Auto$horsepower), fitted(mod2)[order(Auto$horsepower)], col = "purple", lwd = 3)
+lines(sort(Auto$horsepower), fitted(mod3)[order(Auto$horsepower)], col = "green", lwd = 3)
+
+```
+
+Para entender, bajo el enfoque train y test, tenemos casos en los que hay mucha variación. El siguiente gráfico ejemplificaría a lo que nos referimos con este concepto $$\texttt{mpg} = \beta_{0} + \beta_{1}\texttt{horsepower} + \epsilon$$
+
+```{r variacion, warning = FALSE}
+mse <- function(x, y) sum((x - y) ^ 2) / length(x)
+
+err <- numeric(10)
+for(i in 1:10) {
+  train_n <- sample(1:nrow(Auto), size = round(nrow(Auto) * 0.8, 0), replace = FALSE) 
+  train <- Auto[train_n, ] # datos de entrenamiento de 80%
+  test <- Auto[-train_n, ] # datos de testeo del 20%
+  mod <- lm(mpg ~ horsepower, data = train) # Ajuste del modelo
+  err[i] <- mse(test[, 'mpg'], as.numeric(predict(mod, newdata = test))) # Calcula ECM
+}
+
+plot(err, type = "b", col = "red", main = "Variación del error",
+     xlab = "Número de iteración", ylab = "Estimación del error")
+```
+
+Una pregunta natural sería, ¿cuál grado de polinomio (nivel de complejidad) sería mejor si quisiera que mi modelo fuese predictivo? Esta pregunta se puede responder con validación cruzada, como se vio en el curso.
+
+Para esto crearé una función que hace uso del paquete de $\texttt{caret}$:
+
+```{r func, warning = FALSE}
+library(caret)
+
+fit_mse <- function(n = 2, k = 5, method = "cv") {
+  
+  # Define control de entrenamiento
+  train_control <- trainControl(method = method, number = k)
+  
+  # Ajustar modelo lineal
+  model <- train(as.formula(paste0("mpg ~ poly(horsepower,", n, ")")),
+                            data = Auto, trControl = train_control, method = "lm")
+  
+  return(model$results$RMSE)
+  
+}
+
+```
+
+Veamos la gráfica bajo el método de LOOCV (Leave-One-Out Cross Validation), cómo se observan el Error Cuadrático Medio bajo distintos niveles de compléjidad.
+
+```{r loocv, warning = FALSE}
+err_loocv <- unlist(lapply(1:10, function(n) fit_mse(n = n, k = 5, method = "LOOCV")))
+
+df1 <- data.frame(x = 1:10, mse = err_loocv)
+  
+ggplot(df1, aes(x = x, y = mse)) + geom_point(size = 2) + geom_path(size = 1.5) +
+    labs(title = "LOOCV", subtitle = "Modelo Lineal (mpg ~ horsepower)", x = "Complejidad", y = "RSME") + scale_x_continuous(breaks = 1:10, labels = 1:10)
+  
+```
+
+Ahora, usemos el método de k-fold cross validation.
+
+```{r cross_val, warning = FALSE}
+# k = 5 folds
+err_k5 <- unlist(lapply(1:10, function(n) fit_mse(n = n, k = 5)))
+
+# k = 10 folds
+err_k10 <- unlist(lapply(1:10, function(n) fit_mse(n = n, k = 10)))
+
+df2 <- data.frame(type = rep(c("k-5 fold", "k-10 fold"), each = 10),
+                 x = rep(1:10, 2),
+                 rmse = c(err_k5, err_k10))
+
+ggplot(df2, aes(x = x, y = rmse, group = type)) + geom_line(aes(linetype = type), size = 1.5) + 
+  geom_point(size = 3) + scale_x_continuous(breaks = 1:10, labels = 1:10) +
+  labs(title = "k-fold Cross-Validation", subtitle = "Modelo Lineal (mpg ~ horsepower)", x = "Complejidad", y = "RSME")
+
+```
+
