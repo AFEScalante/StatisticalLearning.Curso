@@ -1,0 +1,98 @@
+---
+title: "Statistical Learning - Bootstraps"
+author: "Angel Éscalante"
+date: "3/28/2020"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Este documento fue creado con R Markdown y Shiny con el propósito de hacerlo interactivo.
+
+## Bootstraps
+
+Retomando el ejercicio del libro: imagína que quieres invertir una cantidad fija de dinero en dos acciones lo cúales te dan un retorno de $X$ y $Y$, donde $X$ y $Y$ son valores aleatorios. Supongamos que queremos invertir una proporción $\alpha$ en el activo $X$ y el resto en el activo $Y$, es decir, $1-\alpha$. Lo que buscamos, es el valor de $\alpha$ que minimice $Var(\alpha X + (1-\alpha)Y)$.
+
+```{r portafolio, echo=FALSE}
+library(ISLR)
+
+plot(Portfolio)
+
+```
+
+
+Podemos demostrar que existe una solución analítica para $\alpha$:
+
+$$\alpha = \dfrac{\sigma_{Y}^{2}-\sigma_{XY}}{\sigma_{X}^{2}+\sigma_{Y}^{2}-2\sigma_{XY}}$$
+
+Crearé las funciones necesarias para ejecutar los bootstraps:
+
+```{r functions}
+## Calcula alpha
+alpha <- function(x, y){
+  vx = var(x)
+  vy = var(y)
+  cxy = cov(x, y)
+  (vy - cxy) / (vx + vy - 2 * cxy)
+}
+
+# Calcula los bootstraps
+bootstraps <- function(data, size = 0.2, n = 1000) {
+  size_boot <- round(size * nrow(data), 0)
+  estimate <- numeric(n)
+  for (i in 1:n) {
+    sample_index <- sample(1:nrow(data), size = size_boot, replace = TRUE)
+    estimate[i] <- alpha(data[sample_index, "X"], data[sample_index, "Y"]) 
+  }
+  return(estimate)
+}
+```
+
+En este caso, tenemos `r nrow(Portfolio)` observacionoes y es posible calcular el mejor alpha con todos los datos y así tene el estimado $\hat\alpha =$  `r mean(bootstraps(Portfolio))`
+
+A continuación, un sencillo simulador para el estimador bootstrap:
+
+```{r eruptions, echo=FALSE}
+inputPanel(
+          numericInput("num_boots",
+                        "Número de muestras:",
+                        min = 100,
+                        max = 1000,
+                        value = 100),
+            sliderInput("size_boots",
+                        "Tamaño del bootstrap (% del total de datos):",
+                        min = 0.2,
+                        max = 1,
+                        value = 0.2,
+                        step = 0.1)
+)
+
+df_master <- reactive({
+        bootstraps(Portfolio, size = input$size_boots, n = input$num_boots)
+    })
+
+    renderPlot({
+        par(mfrow = c(1, 2))
+        hist(df_master(), col = "purple", main = "Bootstraps alpha", xlab = bquote(alpha))
+        boxplot(df_master(), col = "purple")
+    })
+```
+    
+El estimado bootstrap $\hat{\alpha}^{*}$ es:
+    
+```{r, echo=FALSE}     
+    renderPrint({
+      mean(df_master())
+    })
+```
+
+y error stándard $std.e(\hat{\alpha}^{*})$
+
+```{r, echo=FALSE}     
+    renderPrint({
+      sd(df_master())
+    })
+```
